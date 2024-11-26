@@ -6,6 +6,7 @@ library(tidyverse)
 library(sf)
 library(lwgeom)
 
+
 deploy_date <- 'November 25, 2024.'
 version <- 'Alpha v0.3 deployed'
 data_conservation <- '2024 30x30 Conservation data and Biodiversity index rank from:'
@@ -18,6 +19,7 @@ sf_use_s2(FALSE)
 ui <- page_sidebar(
   #tags$style(type="text/css", "div.info.legend.leaflet-control br {clear: both;}"),
   title = shiny::img(height = 60, src = 'https://www.socalearth.org/wp-content/uploads/2024/07/Bright-Background-Horizontal-1024x520.png'),
+  window_title = 'SoCal Conservation',
   sidebar = sidebar(
       width = 400,
       title = 'Inputs',
@@ -159,11 +161,15 @@ jurisSelected <- reactive({
 # calculate conserved space within jurisdiction
 space <- reactive({
   areaJuris <- st_area(jurisSelected()) 
-  areaConsvd <- conserve_simple |> 
-    st_intersection(jurisSelected()) |> 
+  areaConsvd1<- conserve_simple |> 
+    st_intersection(jurisSelected()) #|> 
+  
+  if(nrow(areaConsvd1) > 0) {
+  areaConsvd <- areaConsvd1 |> 
     summarize() |> 
     st_area()
   pct_space <- round(100*areaConsvd/areaJuris, 1)
+  } else  {pct_space <- 0}
   return(pct_space)
 })
 
@@ -192,18 +198,27 @@ bufferAreaOS <- reactive({
 bioPct <- reactive({
   high_bio_poly <- high_bio |> 
     st_intersection(jurisSelected()) # find any high_biodiversity area within jurisdiction
-  high_bio_area <- st_area(high_bio_poly) #calculate area of high biodiversity
-  consvd_high_bio_area <- conserve_simple |> 
-    st_intersection(jurisSelected()) |> 
-    summarize() |> 
-    st_intersection(high_bio_poly) |> 
-    st_area()
-  percentBio <- ifelse(length(consvd_high_bio_area) == 0,
-                    0,
-                    round(100*consvd_high_bio_area/high_bio_area,1)
-  )
+
+  if(nrow(high_bio_poly) > 0)   #error handling 1
+    {
+      consvd_high_bio_area1 <- conserve_simple |> 
+        st_intersection(jurisSelected())
+      if(nrow(consvd_high_bio_area1) > 0) #error handling 2
+        {
+         high_bio_area <- st_area(high_bio_poly) #calculate area of high biodiversity
+         consvd_high_bio_area2 <- consvd_high_bio_area1 |> 
+           summarize() |> 
+           st_intersection(high_bio_poly)  
+        }
+        if(nrow(consvd_high_bio_area2) > 0) {
+          consvd_high_bio_area <- consvd_high_bio_area2 |> 
+            st_area()
+          percentBio <- round(100*consvd_high_bio_area/high_bio_area,1)
+          } else {percentBio <- 0}
+      }
+  else {percentBio <- 0}
+    
   return(percentBio)
-  #return(consvd_high_bio_area)
   })
 
 output$consvdSpace <- renderUI({

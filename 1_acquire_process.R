@@ -16,7 +16,7 @@ library(tidyverse)
 library(tigris)
 
 '%ni%' <- Negate('%in%') ## not in operator
-
+options(tigris_use_cache= T)
 #Directories
 wd <- getwd()
 data_dir <- str_c(wd, '/data')
@@ -31,9 +31,13 @@ SoCal_counties <- c('Los Angeles', 'Orange', 'Riverside', 'San Bernardino',
 #County data from tigris 
 CA_counties <- counties(state = 'CA', cb = T, year = 2023) |> 
   filter(NAME %in% c(SoCal_counties)) |> 
-  st_transform(crs = 4326) |> 
   select(NAME, ALAND) |> 
-  mutate(NAME = str_c(NAME, ' County'))
+  mutate(NAME = str_c(NAME, ' County')) |> 
+  st_make_valid() |> 
+  st_transform(crs = 4326)
+
+str(CA_counties)
+st_area(CA_counties)
 
 #Places boundaries from tigris 2023
 #Cities and census designated places (and two towns?)
@@ -47,10 +51,14 @@ SoCal_summary <- CA_counties |>
   summarize(ALAND = sum(ALAND)) |> 
   mutate(NAME = 'Southern California') 
 
+st_is_valid(SoCal_summary)
+st_is_valid(jurisdictions)
+st_is_valid(CA_counties)
 # create full Jurisdiction list - all in NAD83
-jurisFinal2 <- bind_rows(jurisdictions, CA_counties, SoCal_summary)
+jurisFinal2 <- bind_rows(jurisdictions, CA_counties, SoCal_summary) 
 
-rm(ls = CA_counties, jurisdictions, SoCal_summary)
+st_is_valid(jurisFinal2)
+rm(ls = jurisdictions, SoCal_summary)
 
 #30x30 terrestrial data from here - https://www.californianature.ca.gov/pages/open-data
 #2024 terrestrial dataset acquired November 2024
@@ -70,12 +78,13 @@ conserve1 <- conservationAreas |>
 ## Simplify polygons to 10 meter tolerance to conserve space
 conserve_simple <- conserve1 |> 
   st_simplify(dTolerance = 10, preserveTopology = FALSE) |> 
-  st_make_valid() |> 
-  st_transform(crs = 4326)
+  st_transform(crs = 4326) |> 
+  st_make_valid()
 
 # Check how much smaller it is
 round(c(object.size(conservationAreas), object.size(conserve_simple)) / 1024)
 
+st_is_valid(conserve_simple)
 rm(ls = conservationAreas, conserve1)
 gc()
 
@@ -83,15 +92,17 @@ gc()
 # data from 30x30 open data
 # https://www.californianature.ca.gov/pages/open-data downloaded November 2024
 biodiversity <- sf::st_read(dsn = str_c(data_dir, '/Species_Biodiversity_-_ACE')) |> 
-  st_transform(crs = 4326) |> 
   filter(County %in% str_to_upper(SoCal_counties))
 
+gc()
 # simplify it by only keeping three columns and reduce polygon resolution
 bio_simpler <- biodiversity |> 
-  select(County, Name, SpBioRnkEc) |> 
-  group_by(County, Name, SpBioRnkEc) |> 
+  select(Name, SpBioRnkEc) |> 
+  group_by(Name, SpBioRnkEc) |> 
   summarize(.groups = 'drop') |> 
-  st_simplify(dTolerance = .0003, preserveTopology = FALSE) # Tolerance is based on WGS84 decimal degrees
+  st_simplify(dTolerance = .0003, preserveTopology = FALSE) |> 
+  st_make_valid() |> 
+  st_transform(crs = 4326) 
 
 # keep high biodiversity for filtering
 high_bio <- bio_simpler |> 
@@ -103,6 +114,8 @@ round(c(object.size(biodiversity),
         #object.size(bio_simple),
         object.size(bio_simpler)) /1024) 
 
+st_is_valid(bio_simpler)
+st_is_valid(high_bio)
 rm(ls = biodiversity)
 
 setwd(str_c(wd, '/SoCalConservation'))
