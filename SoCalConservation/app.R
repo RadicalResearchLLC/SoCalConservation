@@ -7,8 +7,8 @@ library(sf)
 library(lwgeom)
 
 
-deploy_date <- 'November 25, 2024.'
-version <- 'Alpha v0.3 deployed'
+deploy_date <- 'January 13, 2022'
+version <- 'Alpha v0.4 deployed'
 data_conservation <- '2024 30x30 Conservation data and Biodiversity index rank from:'
 biodiversity_data <- 'https://www.californianature.ca.gov/pages/open-data'
 jurisdiction_data <- 'Jurisdiction data from US Census TIGER/Line 2023'
@@ -70,7 +70,7 @@ server <- function(input, output, session) {
         addProviderTiles(provider = providers$Esri.WorldShadedRelief, group = 'Topography') |>
         addProviderTiles(provider = providers$Esri.WorldGrayCanvas, group = 'Basemap') |>
         addProviderTiles(provider = providers$Esri.WorldImagery, group = 'Imagery') |> 
-        setView(lat = 34, lng = -117.30, zoom = 8) |> 
+        #setView(lat = 34, lng = -117.30, zoom = 8) |> 
           addLayersControl(baseGroups = c('Topography', 'Basemap', 'Imagery'),
                        overlayGroups = c('Conserved lands',
                                            'Jurisdiction',
@@ -88,13 +88,13 @@ server <- function(input, output, session) {
 
 ##Conservation layer
 observe({    
-  leafletProxy("map", data = conserve_simple)  |> 
+  leafletProxy("map", data = mega_conserve)  |> 
     clearGroup(group = 'Conserved lands')  |>
     addPolygons(
       color = 'darkgreen',
       weight = 1,
       fillOpacity = 0.5,
-      label = ~UNIT_NAME,
+      #label = ~UNIT_NAME,
       group = 'Conserved lands',
       options = pathOptions(pane = 'Conserved lands'))
 })
@@ -160,18 +160,22 @@ jurisSelected <- reactive({
 ### Calculations for three text boxes
 # calculate conserved space within jurisdiction
 space <- reactive({
-  areaJuris <- st_area(jurisSelected()) 
-  areaConsvd1<- conserve_simple |> 
-    st_intersection(jurisSelected()) #|> 
+  percent <- jurisTbl |>  
+    filter(jurisTbl$NAME == input$Jurisdiction) |> 
+    pull(conservePct)
+#  areaJuris <- st_area(jurisSelected()) 
+#  areaConsvd1<- conserve_simple |> 
+#    st_intersection(jurisSelected()) #|> 
   
-  if(nrow(areaConsvd1) > 0) {
-  areaConsvd <- areaConsvd1 |> 
-    summarize() |> 
-    st_area()
-  pct_space <- round(100*areaConsvd/areaJuris, 1)
-  } else  {pct_space <- 0}
-  return(pct_space)
+#  if(nrow(areaConsvd1) > 0) {
+#  areaConsvd <- areaConsvd1 |> 
+#    summarize() |> 
+#    st_area()
+#  pct_space <- round(100*areaConsvd/areaJuris, 1)
+#  } else  {pct_space <- 0}
+#  return(pct_space)
 })
+
 
 ## Calculate buffer polygon
 bufferJ <- reactive({
@@ -184,40 +188,49 @@ bufferJ <- reactive({
 
 # calculate accessible space within a distance
 bufferAreaOS <- reactive({
+  if(input$Buffer == 1) {
+    percent <- jurisTbl |>  
+      filter(jurisTbl$NAME == input$Jurisdiction) |> 
+      pull(AccessPct)
+  } else {
   OS1 <- conserve_simple |> 
     st_intersection(bufferJ()) |> 
     summarize() |> 
     st_area()
   area1 <- st_area(bufferJ())
   percent <- round(100*OS1/area1,1)
+  }
   return(percent)
 })
 
 # calculate fraction of high biodiverse space conserved within jurisdiction
 
 bioPct <- reactive({
-  high_bio_poly <- high_bio |> 
-    st_intersection(jurisSelected()) # find any high_biodiversity area within jurisdiction
+  #high_bio_poly <- high_bio |> 
+  #  st_intersection(jurisSelected()) # find any high_biodiversity area within jurisdiction
 
-  if(nrow(high_bio_poly) > 0)   #error handling 1
-    {
-      consvd_high_bio_area1 <- conserve_simple |> 
-        st_intersection(jurisSelected())
-      if(nrow(consvd_high_bio_area1) > 0) #error handling 2
-        {
-         high_bio_area <- st_area(high_bio_poly) #calculate area of high biodiversity
-         consvd_high_bio_area2 <- consvd_high_bio_area1 |> 
-           summarize() |> 
-           st_intersection(high_bio_poly)  
-        }
-        if(nrow(consvd_high_bio_area2) > 0) {
-          consvd_high_bio_area <- consvd_high_bio_area2 |> 
-            st_area()
-          percentBio <- round(100*consvd_high_bio_area/high_bio_area,1)
-          } else {percentBio <- 0}
-      }
-  else {percentBio <- 0}
-    
+#  if(nrow(high_bio_poly) > 0)   #error handling 1
+#    {
+ #     consvd_high_bio_area1 <- conserve_simple |> 
+  #      st_intersection(jurisSelected())
+   #   if(nrow(consvd_high_bio_area1) > 0) #error handling 2
+    #    {
+     #    high_bio_area <- st_area(high_bio_poly) #calculate area of high biodiversity
+      #   consvd_high_bio_area2 <- consvd_high_bio_area1 |> 
+       #    summarize() |> 
+        #   st_intersection(high_bio_poly)  
+        #}
+        #if(nrow(consvd_high_bio_area2) > 0) {
+        #  consvd_high_bio_area <- consvd_high_bio_area2 |> 
+        #    st_area()
+        #  percentBio <- round(100*consvd_high_bio_area/high_bio_area,1)
+        #  } else {percentBio <- 0}
+    #  }
+  #else {percentBio <- 0}
+  percentBio <- jurisTbl |>  
+    filter(jurisTbl$NAME == input$Jurisdiction) |> 
+    pull(highBioPct)
+
   return(percentBio)
   })
 
